@@ -11,10 +11,13 @@ INPUT_FILE = "data/accelerometer_data.csv"
 OUTPUT_FILE = "daily_score.json"
 
 
-def run_safety_engine() -> None:
+def run_safety_engine(
+    input_file: str = INPUT_FILE,
+    output_file: str = OUTPUT_FILE,
+) -> None:
     """Run harsh braking detection and generate the daily safety report."""
     try:
-        samples = iter_accelerometer_data(INPUT_FILE)
+        samples = iter_accelerometer_data(input_file)
         score = analyze_accelerometer_stream(samples)
         events = score["events"]
 
@@ -24,13 +27,13 @@ def run_safety_engine() -> None:
                 f'acc_y={event["acc_y"]} m/s²'
             )
 
-        write_daily_score(score, OUTPUT_FILE)
+        write_daily_score(score, output_file)
 
         print(
             f'[SAFETY SUMMARY] samples={score["total_samples"]} '
             f'harsh_braking_events={score["harsh_braking_events"]}'
         )
-        print(f"[OUTPUT] {OUTPUT_FILE}")
+        print(f"[OUTPUT] {output_file}")
 
     except FileNotFoundError as error:
         print(f"[ERROR] {error}")
