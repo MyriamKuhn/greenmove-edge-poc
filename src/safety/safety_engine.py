@@ -1,3 +1,4 @@
+import json
 import csv
 from pathlib import Path
 
@@ -44,3 +45,25 @@ def detect_harsh_braking_events(samples: list[dict]) -> list[dict]:
             events.append(sample)
 
     return events
+
+def build_daily_score(samples: list[dict], events: list[dict]) -> dict:
+    """Build a daily safety summary from accelerometer samples."""
+    return {
+        "total_samples": len(samples),
+        "harsh_braking_events": len(events),
+        "events": [
+            {
+                "timestamp": event["timestamp"],
+                "acc_y": event["acc_y"],
+            }
+            for event in events
+        ],
+    }
+
+
+def write_daily_score(score: dict, output_path: str) -> None:
+    """Write the daily safety summary to a JSON file."""
+    path = Path(output_path)
+
+    with path.open("w", encoding="utf-8") as file:
+        json.dump(score, file, indent=2)
