@@ -17,3 +17,5 @@ Thumbs.db
 
 # Generated output
 daily_score.json
+
+data/demo_accelerometer_1000.csv

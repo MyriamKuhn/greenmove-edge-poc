@@ -6,30 +6,54 @@ from pathlib import Path
 HARSH_BRAKING_THRESHOLD = -2.5
 
 
-def load_accelerometer_data(file_path: str) -> list[dict]:
-    """Load accelerometer samples from a CSV file."""
+def parse_timestamp(value: str) -> int | float:
+    """Parse integer or fractional timestamps without losing precision."""
+    timestamp = float(value)
+
+    if timestamp.is_integer():
+        return int(timestamp)
+
+    return timestamp
+    
+def iter_accelerometer_data(file_path: str):
+    """Yield accelerometer samples one by one from a CSV file."""
     path = Path(file_path)
 
     if not path.exists():
         raise FileNotFoundError(f"File not found: {file_path}")
 
-    samples = []
-
     with path.open("r", encoding="utf-8", newline="") as file:
         reader = csv.DictReader(file)
 
         for row in reader:
-            samples.append(
+            yield {
+                "timestamp": parse_timestamp(row["timestamp"]),
+                "acc_x": float(row["acc_x"]),
+                "acc_y": float(row["acc_y"]),
+                "acc_z": float(row["acc_z"]),
+            }
+
+def analyze_accelerometer_stream(samples) -> dict:
+    """Process accelerometer samples without keeping the full dataset in memory."""
+    total_samples = 0
+    events = []
+
+    for sample in samples:
+        total_samples += 1
+
+        if is_harsh_braking(sample["acc_y"]):
+            events.append(
                 {
-                    "timestamp": int(row["timestamp"]),
-                    "acc_x": float(row["acc_x"]),
-                    "acc_y": float(row["acc_y"]),
-                    "acc_z": float(row["acc_z"]),
+                    "timestamp": sample["timestamp"],
+                    "acc_y": sample["acc_y"],
                 }
             )
 
-    return samples
-
+    return {
+        "total_samples": total_samples,
+        "harsh_braking_events": len(events),
+        "events": events,
+    }
 
 def is_harsh_braking(acc_y: float) -> bool:
     """Return True when longitudinal deceleration exceeds the threshold."""
