@@ -1,9 +1,8 @@
 import csv
 
 from src.safety.safety_engine import (
-    build_daily_score,
-    detect_harsh_braking_events,
-    load_accelerometer_data,
+    analyze_accelerometer_stream,
+    iter_accelerometer_data,
     write_daily_score,
 )
 
@@ -12,12 +11,15 @@ INPUT_FILE = "data/accelerometer_data.csv"
 OUTPUT_FILE = "daily_score.json"
 
 
-def run_safety_engine() -> None:
+def run_safety_engine(
+    input_file: str = INPUT_FILE,
+    output_file: str = OUTPUT_FILE,
+) -> None:
     """Run harsh braking detection and generate the daily safety report."""
     try:
-        samples = load_accelerometer_data(INPUT_FILE)
-        events = detect_harsh_braking_events(samples)
-        score = build_daily_score(samples, events)
+        samples = iter_accelerometer_data(input_file)
+        score = analyze_accelerometer_stream(samples)
+        events = score["events"]
 
         for event in events:
             print(
@@ -25,13 +27,13 @@ def run_safety_engine() -> None:
                 f'acc_y={event["acc_y"]} m/s²'
             )
 
-        write_daily_score(score, OUTPUT_FILE)
+        write_daily_score(score, output_file)
 
         print(
-            f"[SAFETY SUMMARY] samples={len(samples)} "
-            f"harsh_braking_events={len(events)}"
+            f'[SAFETY SUMMARY] samples={score["total_samples"]} '
+            f'harsh_braking_events={score["harsh_braking_events"]}'
         )
-        print(f"[OUTPUT] {OUTPUT_FILE}")
+        print(f"[OUTPUT] {output_file}")
 
     except FileNotFoundError as error:
         print(f"[ERROR] {error}")
