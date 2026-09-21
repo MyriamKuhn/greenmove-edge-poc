@@ -87,3 +87,16 @@ def test_load_json_file_invalid_json(tmp_path):
 
     with pytest.raises(json.JSONDecodeError):
         load_json_file(str(invalid_file))
+
+def test_zfe_entry_transition_triggers_only_once():
+    states = [False, False, True, True, True]
+    was_inside = False
+    alert_count = 0
+
+    for is_inside in states:
+        if is_inside and not was_inside:
+            alert_count += 1
+
+        was_inside = is_inside
+
+    assert alert_count == 1

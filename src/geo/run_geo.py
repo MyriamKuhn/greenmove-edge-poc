@@ -18,20 +18,29 @@ def run_geo_engine() -> None:
         gps_points = load_json_file(GPS_FILE)
         bbox = calculate_bounding_box(polygon)
 
+        was_inside = False
+
         for point in gps_points:
             is_inside = is_point_in_zfe(point, polygon, bbox)
 
-            if is_inside:
+            if is_inside and not was_inside:
                 print(
                     f'[ALERT ZFE] id={point["id"]} '
                     f'time={point["timestamp"]} '
                     f'lat={point["lat"]} lon={point["lon"]}'
+                )
+            elif is_inside:
+                print(
+                    f'[GPS IN] id={point["id"]} '
+                    f'time={point["timestamp"]}'
                 )
             else:
                 print(
                     f'[GPS OUT] id={point["id"]} '
                     f'time={point["timestamp"]}'
                 )
+
+            was_inside = is_inside
 
     except FileNotFoundError as error:
         print(f"[ERROR] {error}")
