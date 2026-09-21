@@ -2,10 +2,10 @@
 
 Proof of concept for GreenMove Logistics demonstrating offline ZFE geofencing and telematics-based harsh braking detection on constrained edge hardware.
 
-The project contains two independent modules:
+The project contains two main modules:
 
 - **Geo Engine**: detects whether simulated GPS positions enter the Lyon ZFE using a Bounding Box optimization followed by a Ray Casting Point-in-Polygon algorithm.
-- **Safety Engine**: analyzes longitudinal accelerometer data and detects harsh braking events using a lightweight threshold-based filter.
+- **Safety Engine**: analyzes longitudinal accelerometer data and detects harsh braking events using a lightweight threshold-based filter and streaming processing.
 
 The POC is designed to run locally without any network dependency.
 
@@ -69,11 +69,15 @@ greenmove-edge-poc/
 │   ├── accelerometer_data.csv
 │   ├── lyon_polygon.json
 │   └── truck_gps.json
+├── scripts/
+│   └── generate_demo_data.py
 ├── src/
 │   ├── geo/
+│   │   ├── __init__.py
 │   │   ├── geo_engine.py
 │   │   └── run_geo.py
 │   └── safety/
+│       ├── __init__.py
 │       ├── safety_engine.py
 │       └── run_safety.py
 ├── tests/
@@ -81,9 +85,60 @@ greenmove-edge-poc/
 │   │   └── test_geo_engine.py
 │   └── safety/
 │       └── test_safety_engine.py
+├── run_demo.py
 ├── .gitignore
 ├── requirements.txt
 └── README.md
+```
+
+## Run the Complete Demo
+
+Run the complete POC with:
+
+```bash
+python run_demo.py
+```
+
+This executes the Geo Engine followed by the Safety Engine using the original datasets provided for the exercise.
+
+Example output:
+
+```text
+=== GREENMOVE EDGE POC ===
+
+=== GEO ENGINE ===
+[GPS OUT] id=1 time=08:00:00
+[GPS OUT] id=2 time=08:00:10
+[GPS OUT] id=3 time=08:00:20
+[ALERT ZFE] id=4 time=08:00:30 lat=45.76 lon=4.8357
+[GPS IN] id=5 time=08:00:40
+
+=== SAFETY ENGINE ===
+[HARSH BRAKING] timestamp=1678880005 acc_y=-3.45 m/s²
+[SAFETY SUMMARY] samples=10 harsh_braking_events=1
+[OUTPUT] daily_score.json
+
+=== DEMO COMPLETE ===
+```
+
+For a higher-volume Edge Computing demonstration:
+
+```bash
+python run_demo.py --stress
+```
+
+The stress mode generates and processes 1000 accelerometer samples representing 10 seconds of data at a simulated 100 Hz sampling rate.
+
+Only significant events are retained in the generated safety report.
+
+Example:
+
+```text
+Generated 1000 samples in data\demo_accelerometer_1000.csv
+[DEMO] Processing 1000 samples at simulated 100 Hz
+[HARSH BRAKING] timestamp=1678881005.49 acc_y=-3.45 m/s²
+[SAFETY SUMMARY] samples=1000 harsh_braking_events=1
+[OUTPUT] daily_score.json
 ```
 
 ## Run the Geo Engine
@@ -101,7 +156,7 @@ Example output:
 [GPS OUT] id=2 time=08:00:10
 [GPS OUT] id=3 time=08:00:20
 [ALERT ZFE] id=4 time=08:00:30 lat=45.76 lon=4.8357
-[ALERT ZFE] id=5 time=08:00:40 lat=45.75 lon=4.85
+[GPS IN] id=5 time=08:00:40
 ```
 
 The Geo Engine works entirely from locally stored JSON files and does not require a network connection.
@@ -147,7 +202,7 @@ Run all automated tests with:
 python -m pytest -v
 ```
 
-The current test suite contains 17 tests covering both the Geo and Safety engines.
+The current test suite contains 20 tests covering both the Geo and Safety engines.
 
 ## Input Files
 
@@ -204,6 +259,8 @@ If the point is outside the bounding box, it cannot be inside the ZFE polygon an
 
 This avoids running the more detailed Ray Casting calculation for obviously distant points.
 
+The Bounding Box is calculated once and reused for all GPS positions.
+
 ### Ray Casting / Point in Polygon
 
 For points that pass the Bounding Box check, the engine uses the Ray Casting algorithm.
@@ -215,7 +272,9 @@ The algorithm counts how many polygon edges intersect this ray:
 - an odd number of intersections means the point is inside the polygon;
 - an even number of intersections means the point is outside the polygon.
 
-The implementation also explicitly checks whether a point lies directly on a polygon segment. Boundary points are considered inside the ZFE.
+The implementation also explicitly checks whether a point lies directly on a polygon segment.
+
+Boundary points are considered inside the ZFE.
 
 The algorithm processes each polygon edge once, resulting in linear complexity relative to the number of polygon vertices:
 
@@ -223,11 +282,26 @@ The algorithm processes each polygon edge once, resulting in linear complexity r
 O(N)
 ```
 
-This is appropriate for the constrained edge hardware targeted by the POC.
+This is appropriate for constrained edge hardware.
+
+### ZFE Entry Detection
+
+The Geo Engine also keeps track of the previous vehicle state.
+
+The ZFE alert is triggered only when the vehicle transitions from outside to inside the polygon:
+
+```text
+OUT -> OUT  : no alert
+OUT -> IN   : [ALERT ZFE]
+IN  -> IN   : no repeated alert
+IN  -> OUT  : vehicle leaves the zone
+```
+
+This avoids repeatedly alerting the driver while the vehicle remains inside the ZFE.
 
 ## Safety Algorithm
 
-The Safety Engine reads accelerometer samples sequentially and focuses on the longitudinal Y axis.
+The Safety Engine focuses on the longitudinal Y axis.
 
 The exercise dataset is expressed in `m/s²`.
 
@@ -245,17 +319,38 @@ For example:
 -3.45 m/s²  -> harsh braking
 ```
 
-The threshold therefore acts as a lightweight filtering mechanism: small variations and vehicle vibrations are ignored, while significant longitudinal deceleration is retained as an event.
+The threshold acts as a lightweight filtering mechanism.
+
+Small variations and vehicle vibrations are ignored, while significant longitudinal deceleration is retained as an event.
 
 A moving average was intentionally not used for this POC because smoothing a very short event could reduce its amplitude and hide the braking peak.
 
-The Safety Engine processes each sample once:
+### Streaming Processing
+
+Accelerometer samples are read one at a time using Python's standard CSV library.
+
+The full dataset is not loaded into memory.
+
+The engine only keeps:
+
+- a sample counter;
+- detected harsh braking events.
+
+This reduces memory usage and is better suited to the constrained Zebra ET40 environment.
+
+At 100 samples per second:
+
+```text
+1000 samples = 10 seconds of sensor data
+```
+
+The stress demonstration shows that the engine can process all 1000 samples while retaining only the significant braking event.
+
+The processing complexity is linear:
 
 ```text
 O(N)
 ```
-
-This keeps CPU and memory usage low.
 
 ## Output Files
 
@@ -263,10 +358,16 @@ This keeps CPU and memory usage low.
 
 The Geo Engine writes its results to standard output.
 
-When a GPS point is detected inside the ZFE, the following log format is produced:
+When the vehicle enters the ZFE, the following log format is produced:
 
 ```text
 [ALERT ZFE] id=4 time=08:00:30 lat=45.76 lon=4.8357
+```
+
+A vehicle that remains inside the zone is logged without repeating the alert:
+
+```text
+[GPS IN] id=5 time=08:00:40
 ```
 
 Positions outside the zone are logged as:
@@ -289,7 +390,7 @@ The generated file contains:
 - the number of detected harsh braking events;
 - the timestamp and longitudinal acceleration of each event.
 
-The output file is generated at runtime and is therefore excluded from Git through `.gitignore`.
+The output file is generated at runtime and is excluded from Git through `.gitignore`.
 
 ## Error Handling
 
@@ -315,7 +416,7 @@ or:
 [ERROR] File not found: data/accelerometer_data.csv
 ```
 
-This behavior is particularly important for the live demonstration because invalid input should be reported clearly without crashing the complete application flow.
+This behavior is important for the live demonstration because invalid input should be reported clearly without crashing the complete application flow.
 
 ## Dataset Note
 
@@ -347,15 +448,16 @@ The POC therefore follows several lightweight design principles:
 
 - no external geospatial framework;
 - no pandas or NumPy dependency;
-- sequential processing of GPS and accelerometer samples;
 - Bounding Box rejection before Ray Casting;
-- O(N) processing instead of nested O(N²) algorithms;
+- linear O(N) algorithms rather than nested O(N²) processing;
 - local processing without network dependency;
-- compact JSON output containing detected events instead of raw sensor history.
+- accelerometer streaming instead of loading the full dataset into memory;
+- retention of detected events instead of the complete raw sensor history;
+- compact JSON output for the daily safety report.
 
-The Bounding Box is calculated once and reused for all GPS points.
+The stress mode demonstrates the processing of 1000 samples at a simulated 100 Hz sampling rate while retaining only the relevant harsh braking event.
 
-For the Safety module, samples are read and processed with Python's standard CSV library.
+This illustrates the Edge Computing principle used by the project: process raw data locally and keep only useful information for later storage or transmission.
 
 ## Limitations of the POC
 
@@ -370,17 +472,21 @@ Current limitations include:
 - accelerometer data is simulated from a CSV file;
 - the harsh braking threshold is fixed;
 - the daily report does not implement an insurer-specific scoring formula;
-- there is no local database or deferred Cloud synchronization yet;
+- detected events are still stored in memory until the daily JSON file is written;
+- there is no local database yet;
+- there is no deferred Cloud synchronization yet;
 - there is no graphical driver interface.
 
 These elements would belong to a production implementation rather than to the core feasibility POC.
 
 ## Design Rationale
 
-The implementation deliberately favors simple and deterministic algorithms.
+The implementation deliberately favors simple, deterministic and explainable algorithms.
 
 The Geo module validates that ZFE detection can operate without network access, directly addressing the failure mode of the previous Cloud-dependent application.
 
 The Safety module validates that local accelerometer data can produce behavioral driving evidence by isolating significant braking events from normal variations.
 
-Both modules use only lightweight processing and local files, making the POC suitable for demonstrating the Edge Computing approach on constrained hardware.
+The streaming approach reduces memory usage while the stress demonstration confirms that high-frequency input can be processed locally without retaining all raw measurements.
+
+Both modules use lightweight local processing, making the POC suitable for demonstrating the Edge Computing approach on constrained hardware.
