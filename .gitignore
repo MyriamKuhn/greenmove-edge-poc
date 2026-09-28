@@ -19,3 +19,7 @@ Thumbs.db
 daily_score.json
 
 data/demo_accelerometer_1000.csv
+ota_state.json
+ota_status.json
+bloc3_demo_events.db
+greenmove_events.db
