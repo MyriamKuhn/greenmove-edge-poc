@@ -1,3 +1,11 @@
+"""Validate the OTA demonstration package before installation.
+
+The SHA-256 checksum is real and verifies package integrity. The
+``demo_signature`` is intentionally pedagogical and must not be presented as
+production-grade cryptographic signing. A production system would use an
+asymmetric signature verified with a public key embedded on the device.
+"""
+
 import hashlib
 import json
 from pathlib import Path
@@ -20,6 +28,7 @@ DEMO_PUBLIC_MARKER = (
 def sha256_file(
     path: Path,
 ) -> str:
+    """Return the SHA-256 digest of a package file."""
     digest = hashlib.sha256()
     digest.update(path.read_bytes())
     return digest.hexdigest()
@@ -28,6 +37,7 @@ def sha256_file(
 def expected_demo_signature(
     checksum: str,
 ) -> str:
+    """Build the deterministic signature used only by this demonstration."""
     value = (
         f"{checksum}:"
         f"{DEMO_PUBLIC_MARKER}"
@@ -39,6 +49,7 @@ def expected_demo_signature(
 
 
 def validate_manifest() -> dict:
+    """Validate the manifest checksum and demonstration signature."""
     manifest = json.loads(
         MANIFEST_PATH.read_text(
             encoding="utf-8"
@@ -69,6 +80,7 @@ def validate_manifest() -> dict:
 
 
 def main() -> None:
+    """Exit with an error when the OTA package validation fails."""
     result = validate_manifest()
 
     if not result["checksum_valid"]:

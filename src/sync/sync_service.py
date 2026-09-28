@@ -1,3 +1,9 @@
+"""Deferred synchronization service for locally persisted telemetry events.
+
+Network transmission is injected through a sender callable. This keeps network
+I/O outside the business model and makes the retry behavior easy to test.
+"""
+
 from collections.abc import Callable
 from typing import Any
 
@@ -11,6 +17,8 @@ Sender = Callable[
 
 
 class SyncService:
+    """Synchronize pending events without losing them on network failure."""
+
     def __init__(
         self,
         repository: EventRepository,
@@ -27,6 +35,11 @@ class SyncService:
         self,
         limit: int = 100,
     ) -> dict[str, int]:
+        """Try to send a bounded batch of pending events.
+
+        An event is marked as synchronized only after a successful send.
+        Temporary transport failures leave the event pending for a later retry.
+        """
         synced_ids: list[int] = []
         failed = 0
 
@@ -47,6 +60,8 @@ class SyncService:
                     TimeoutError,
                     OSError,
                 ):
+                    # Transport errors are expected during connectivity loss.
+                    # The event remains pending instead of being discarded.
                     continue
 
             if delivered:

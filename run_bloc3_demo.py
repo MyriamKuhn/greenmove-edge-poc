@@ -1,3 +1,10 @@
+"""Demonstrate local persistence and deferred network synchronization.
+
+The scenario creates one harsh-braking event, simulates a 4G outage, verifies
+that the event remains pending locally, then simulates network recovery and
+verifies that the event is finally synchronized.
+"""
+
 from pathlib import Path
 
 from src.domain.telemetry_event import TelemetryEvent
@@ -12,6 +19,7 @@ def offline_sender(
     _event: dict,
     _timeout: float,
 ) -> None:
+    """Simulate a network outage."""
     raise ConnectionError(
         "simulated 4G outage"
     )
@@ -21,6 +29,7 @@ def online_sender(
     event: dict,
     timeout: float,
 ) -> None:
+    """Simulate a successful backend transmission."""
     print(
         f'[SYNC] sent id={event["id"]} '
         f'type={event["event_type"]} '
@@ -29,6 +38,7 @@ def online_sender(
 
 
 def main() -> None:
+    """Run the complete offline-then-online demonstration scenario."""
     if DB_PATH.exists():
         DB_PATH.unlink()
 
@@ -46,6 +56,7 @@ def main() -> None:
         f"{repository.pending_count()}"
     )
 
+    # First attempt: connectivity is unavailable.
     offline = SyncService(
         repository,
         offline_sender,
@@ -61,6 +72,7 @@ def main() -> None:
         f"pending={repository.pending_count()}"
     )
 
+    # Second attempt: connectivity has returned.
     online = SyncService(
         repository,
         online_sender,

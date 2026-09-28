@@ -1,3 +1,10 @@
+"""SQLite repository used to persist telemetry events locally.
+
+The repository replaces the unbounded in-memory buffer from the initial POC.
+Events remain stored locally while connectivity is unavailable and are marked
+as synchronized only after a successful transmission.
+"""
+
 import json
 import sqlite3
 from collections.abc import Iterator
@@ -9,6 +16,8 @@ from src.domain.telemetry_event import TelemetryEvent
 
 
 class EventRepository:
+    """Persist telemetry events and track their synchronization state."""
+
     def __init__(
         self,
         db_path: str | Path = "greenmove_events.db",
@@ -20,6 +29,11 @@ class EventRepository:
     def _connection(
         self,
     ) -> Iterator[sqlite3.Connection]:
+        """Open and always close a SQLite connection safely.
+
+        Explicit closure is important on Windows because an open connection
+        may keep the database file locked after the operation has completed.
+        """
         connection = sqlite3.connect(
             self.db_path
         )
@@ -32,6 +46,7 @@ class EventRepository:
             connection.close()
 
     def _initialize(self) -> None:
+        """Create the event table when the database is first used."""
         with self._connection() as connection:
             connection.execute(
                 """
@@ -49,6 +64,7 @@ class EventRepository:
         self,
         event: TelemetryEvent,
     ) -> int:
+        """Persist an event as pending and return its database identifier."""
         with self._connection() as connection:
             cursor = connection.execute(
                 """
@@ -73,6 +89,11 @@ class EventRepository:
         self,
         limit: int = 100,
     ) -> list[dict]:
+        """Return unsynchronized events, oldest first.
+
+        A limit is used so synchronization happens in bounded batches rather
+        than loading the whole local database in memory.
+        """
         with self._connection() as connection:
             rows = connection.execute(
                 """
@@ -105,6 +126,7 @@ class EventRepository:
         self,
         event_ids: Iterable[int],
     ) -> None:
+        """Mark successfully transmitted events as synchronized."""
         ids = list(event_ids)
 
         if not ids:
@@ -125,6 +147,7 @@ class EventRepository:
             )
 
     def pending_count(self) -> int:
+        """Return the number of events still waiting for synchronization."""
         with self._connection() as connection:
             row = connection.execute(
                 """

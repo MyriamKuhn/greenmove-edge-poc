@@ -1,3 +1,10 @@
+"""Simulate OTA installation, status reporting and rollback behavior.
+
+This module is a demonstration of the lifecycle expected from an OTA update.
+It is not a production Android updater and does not implement atomic package
+installation at operating-system level.
+"""
+
 import argparse
 import json
 from pathlib import Path
@@ -15,6 +22,7 @@ DEFAULT_VERSION = "2.2.0"
 
 
 def read_current_version() -> str:
+    """Return the currently installed simulated version."""
     if not STATE_PATH.exists():
         return DEFAULT_VERSION
 
@@ -30,6 +38,7 @@ def read_current_version() -> str:
 def write_current_version(
     version: str,
 ) -> None:
+    """Persist the simulated current version."""
     STATE_PATH.write_text(
         json.dumps(
             {
@@ -46,6 +55,7 @@ def write_current_version(
 def write_status(
     status: dict,
 ) -> None:
+    """Persist the status that would normally be reported to the backend."""
     STATUS_PATH.write_text(
         json.dumps(
             status,
@@ -60,6 +70,7 @@ def simulate_update(
     version: str,
     fail_install: bool = False,
 ) -> dict:
+    """Simulate a successful update or a rollback after installation failure."""
     previous = read_current_version()
 
     print(
@@ -68,6 +79,7 @@ def simulate_update(
     )
 
     if fail_install:
+        # Keep the last known healthy version active when installation fails.
         write_current_version(
             previous
         )
@@ -124,6 +136,7 @@ def simulate_update(
 
 
 def main() -> None:
+    """Parse CLI arguments and execute the OTA simulation."""
     parser = argparse.ArgumentParser()
 
     parser.add_argument(
